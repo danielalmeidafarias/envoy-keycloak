@@ -1,0 +1,99 @@
+static_resources:
+  listeners:
+  - name: listener_0
+    address:
+      socket_address:
+        address: 0.0.0.0
+        port_value: 8081
+    filter_chains:
+    - filters:
+      - name: envoy.filters.network.http_connection_manager
+        typed_config:
+          "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
+          stat_prefix: ingress_http
+          route_config:
+            name: local_route
+            virtual_hosts:
+            - name: local_service
+              domains: ["*"]
+              routes:
+              # Route for Go Application
+              - match:
+                  prefix: "/"
+                route:
+                  prefix_rewrite: "/"
+                  cluster: go_app_cluster
+
+          http_filters:
+          - name: envoy.filters.http.jwt_authn
+            typed_config: 
+              "@type": type.googleapis.com/envoy.extensions.filters.http.jwt_authn.v3.JwtAuthentication
+              providers: 
+                keycloak: 
+                  issuer: http://localhost:8080/realms/iezTelecom
+                  remote_jwks: 
+                    http_uri: 
+                      uri: http://localhost:8080/realms/iezTelecom/protocol/openid-connect/certs
+                      cluster: keycloak_cluster
+                      timeout: 3s
+                  forward: true
+                  forward_payload_header: x-jwt-payload
+                  claim_to_headers:
+                  - claim_name: sub
+                    header_name: x-sub-payload
+                  - claim_name: azp
+                    header_name: x-azp-payload
+                  - claim_name: resource_access
+                    header_name: x-resource_access-payload
+              rules: 
+              - match: 
+                  path: "/"
+              - match: 
+                  prefix: "/"
+                requires:
+                  provider_name: keycloak
+          - name: envoy.filters.http.lua
+            typed_config:
+              "@type": type.googleapis.com/envoy.extensions.filters.http.lua.v3.Lua 
+              default_source_code:
+                filename: /etc/envoy/script.lua
+          - name: envoy.filters.http.router
+            typed_config:
+              "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
+
+  clusters:
+  # Go Application Cluster
+  - name: go_app_cluster
+    type: STRICT_DNS
+    connect_timeout: 5s
+    lb_policy: ROUND_ROBIN
+    load_assignment:
+      cluster_name: go_app_cluster
+      endpoints:
+      - lb_endpoints:
+        - endpoint:
+            address:
+              socket_address:
+                address: app  # Service name in Docker network
+                port_value: 3000
+
+  # Keycloak Server Cluster  
+  - name: keycloak_cluster
+    type: STRICT_DNS
+    connect_timeout: 5s
+    lb_policy: ROUND_ROBIN
+    load_assignment:
+      cluster_name: keycloak_cluster
+      endpoints:
+      - lb_endpoints:
+        - endpoint:
+            address:
+              socket_address:
+                address: keycloak  # Service name in Docker network
+                port_value: 8080
+
+admin:
+  address:
+    socket_address:
+      address: 0.0.0.0
+      port_value: 9901

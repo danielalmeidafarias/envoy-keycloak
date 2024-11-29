@@ -1,0 +1,40 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: go_app
+    ports:  # Changed from expose to ports
+      - "3000:3000"
+    networks:
+      - app_network
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0.6
+    container_name: keycloak
+    environment:
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+    command: start-dev
+    ports:
+      - "8080:8080"  # Changed to default Keycloak port
+    networks:
+      - app_network
+
+  envoy:
+    image: envoyproxy/envoy:dev-4aa1d1b2b7bc408d5b61ee2eb389e31300b76ad0
+    container_name: envoy_proxy
+    volumes:
+      - ./envoy.yaml:/etc/envoy/envoy.yaml
+      - ./script.lua:/etc/envoy/script.lua
+    ports:
+      - "8081:8081"
+    depends_on:
+      - app
+      - keycloak
+    networks:
+      - app_network
+
+networks:
+  app_network:
+    driver: bridge
