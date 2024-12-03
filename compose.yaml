@@ -22,11 +22,14 @@ services:
       - app_network
 
   envoy:
-    image: envoyproxy/envoy:dev-4aa1d1b2b7bc408d5b61ee2eb389e31300b76ad0
+    build:
+      context: .
+      dockerfile: Dockerfile.envoy
     container_name: envoy_proxy
     volumes:
       - ./envoy.yaml:/etc/envoy/envoy.yaml
       - ./script.lua:/etc/envoy/script.lua
+      - ./lua/lua-cjson/lua:/var/lib/lua/cjson
     ports:
       - "8081:8081"
     depends_on:
